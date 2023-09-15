@@ -968,6 +968,10 @@ public class MongoDbConnectorConfig extends CommonConnectorConfig {
 
     }
 
+    public List<String> getIncludedCollections() {
+        return List.of(getConfig().getString(COLLECTION_INCLUDE_LIST).split(","));
+    }
+
     @Override
     public boolean supportsOperationFiltering() {
         return true;

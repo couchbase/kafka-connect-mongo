@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.kafka.connect.data.Schema;
@@ -43,6 +44,10 @@ public class MongoDbOffsetContext extends CommonOffsetContext<SourceInfo> {
         sourceInfo.startInitialSync(replicaSetName);
     }
 
+    public SourceInfo source(){
+        return sourceInfo;
+    }
+
     void stopReplicaSetSnapshot(String replicaSetName) {
         sourceInfo.stopInitialSync(replicaSetName);
     }
@@ -70,6 +75,14 @@ public class MongoDbOffsetContext extends CommonOffsetContext<SourceInfo> {
 
     @Override
     public void preSnapshotCompletion() {
+    }
+
+    public Map<String, Optional<String>> getIncludedCollections(String replicaSetName) {
+        return sourceInfo.getIncludedCollections(replicaSetName);
+    }
+
+    public void markSnapshotComplete(String replicaSetName, String collectionNamespace, String resumeToken) {
+       sourceInfo.markSnapshotComplete(replicaSetName, collectionNamespace, resumeToken);
     }
 
     @Override

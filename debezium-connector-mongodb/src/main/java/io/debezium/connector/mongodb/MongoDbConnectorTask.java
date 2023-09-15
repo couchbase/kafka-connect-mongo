@@ -7,11 +7,14 @@ package io.debezium.connector.mongodb;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.mongodb.connection.ReplicaSet;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
@@ -82,6 +85,14 @@ public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition,
         this.schema = new MongoDbSchema(taskContext.filters(), taskContext.topicNamingStrategy(), structSchema, schemaNameAdjuster);
 
         final ReplicaSets replicaSets = getReplicaSets(connectorConfig);
+        // setting all the required collection for the snapshot.
+        for(ReplicaSet replicaSet : replicaSets.all()) {
+            Map<String, Optional<String>> snapMap = new HashMap<>();
+            for(String collection: connectorConfig.getIncludedCollections()) {
+                snapMap.put(collection, Optional.empty());
+            }
+            SourceInfo.alreadySnapshottedCollectionByReplicaSetName.put(replicaSet.replicaSetName(), snapMap);
+        }
         final MongoDbOffsetContext previousOffset = getPreviousOffset(connectorConfig, replicaSets);
         final Clock clock = Clock.system();
 

@@ -6,7 +6,11 @@
 package io.debezium.connector.mongodb;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -142,95 +146,130 @@ public class MongoDbStreamingChangeEventSource implements StreamingChangeEventSo
 
         LOGGER.info("Reading change stream for '{}'", replicaSet);
 
-        final ChangeStreamIterable<BsonDocument> rsChangeStream = MongoUtil.openChangeStream(client, taskContext);
-        if (taskContext.getCaptureMode().isFullUpdate()) {
-            rsChangeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
-        }
-        if (taskContext.getCaptureMode().isIncludePreImage()) {
-            rsChangeStream.fullDocumentBeforeChange(FullDocumentBeforeChange.WHEN_AVAILABLE);
-        }
-        if (rsOffsetContext.lastResumeToken() != null) {
-            LOGGER.info("Resuming streaming from token '{}'", rsOffsetContext.lastResumeToken());
+        final Map<String, List<String>> resumeTokenToCollectionMap = new HashMap<>();
 
-            final BsonDocument doc = new BsonDocument();
-            doc.put("_data", new BsonString(rsOffsetContext.lastResumeToken()));
-            rsChangeStream.resumeAfter(doc);
-        }
-        else if (rsOffsetContext.lastTimestamp() != null) {
-            LOGGER.info("Resuming streaming from operation time '{}'", rsOffsetContext.lastTimestamp());
-            rsChangeStream.startAtOperationTime(rsOffsetContext.lastTimestamp());
-        }
-
-        if (connectorConfig.getCursorMaxAwaitTime() > 0) {
-            rsChangeStream.maxAwaitTime(connectorConfig.getCursorMaxAwaitTime(), TimeUnit.MILLISECONDS);
-        }
-
-        try (MongoChangeStreamCursor<ChangeStreamDocument<BsonDocument>> cursor = rsChangeStream.cursor()) {
-            // In Replicator, this used cursor.hasNext() but this is a blocking call and I observed that this can
-            // delay the shutdown of the connector by up to 15 seconds or longer. By introducing a Metronome, we
-            // can respond to the stop request much faster and without much overhead.
-            Metronome pause = Metronome.sleeper(Duration.ofMillis(500), clock);
-            while (context.isRunning()) {
-                // Use tryNext which will return null if no document is yet available from the cursor.
-                // In this situation if not document is available, we'll pause.
-                final ChangeStreamDocument<BsonDocument> event = cursor.tryNext();
-                if (event != null) {
-                    LOGGER.trace("Arrived Change Stream event: {}", event);
-
-                    rsOffsetContext.changeStreamEvent(event);
-                    CollectionId collectionId = new CollectionId(
-                            replicaSet.replicaSetName(),
-                            event.getNamespace().getDatabaseName(),
-                            event.getNamespace().getCollectionName());
-
-                    try {
-                        // Note that this will trigger a heartbeat request
-                        dispatcher.dispatchDataChangeEvent(
-                                rsPartition,
-                                collectionId,
-                                new MongoDbChangeRecordEmitter(
-                                        rsPartition,
-                                        rsOffsetContext,
-                                        clock,
-                                        event, connectorConfig));
-                    }
-                    catch (Exception e) {
-                        errorHandler.setProducerThrowable(e);
-                        return;
-                    }
-                }
-                else {
-                    // No event was returned, so trigger a heartbeat
-                    try {
-                        // Guard against `null` to be protective of issues like SERVER-63772, and situations called out in the Javadocs:
-                        // > resume token [...] can be null if the cursor has either not been iterated yet, or the cursor is closed.
-                        if (cursor.getResumeToken() != null) {
-                            rsOffsetContext.noEvent(cursor);
-                            dispatcher.dispatchHeartbeatEvent(rsPartition, rsOffsetContext);
-                        }
-                    }
-                    catch (InterruptedException e) {
-                        LOGGER.info("Replicator thread is interrupted");
-                        Thread.currentThread().interrupt();
-                        return;
-                    }
-
-                    try {
-                        pause.pause();
-                        if (context.isPaused()) {
-                            LOGGER.info("Streaming will now pause");
-                            context.streamingPaused();
-                            context.waitSnapshotCompletion();
-                            LOGGER.info("Streaming resumed");
-                        }
-                    }
-                    catch (InterruptedException e) {
-                        break;
-                    }
-
+        for(Map.Entry<String, Optional<String>> entry : offsetContext.getIncludedCollections(replicaSet.replicaSetName()).entrySet()) {
+            if(entry.getValue().isPresent()) {
+                if(resumeTokenToCollectionMap.containsKey(entry.getValue().get())) {
+                    resumeTokenToCollectionMap.get(entry.getValue().get()).add(entry.getKey());
+                }else {
+                List<String> colList = new ArrayList<>();
+                colList.add(entry.getKey());
+                   resumeTokenToCollectionMap.put(entry.getValue().get(), colList);
                 }
             }
         }
+
+        LOGGER.info("Starting Change Stream for this SnapMap: {}",resumeTokenToCollectionMap);
+
+        int threads = resumeTokenToCollectionMap.size();
+        final ExecutorService executor = Threads.newFixedThreadPool(MongoDbConnector.class, taskContext.serverName(), "collection-streaming", threads);
+        final CountDownLatch latch = new CountDownLatch(threads);
+
+        for(String resumeToken : resumeTokenToCollectionMap.keySet()) {
+            executor.submit(() -> {
+                final ChangeStreamIterable<BsonDocument> rsChangeStream = MongoUtil.openChangeStream(client, taskContext, resumeTokenToCollectionMap.get(resumeToken));
+                if (taskContext.getCaptureMode().isFullUpdate()) {
+                    rsChangeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
+                }
+                if (taskContext.getCaptureMode().isIncludePreImage()) {
+                    rsChangeStream.fullDocumentBeforeChange(FullDocumentBeforeChange.WHEN_AVAILABLE);
+                }
+                if (resumeToken != null) {
+                    LOGGER.info("Resuming streaming from token '{}'", resumeToken);
+
+                    final BsonDocument doc = new BsonDocument();
+                    doc.put("_data", new BsonString(resumeToken));
+                    rsChangeStream.resumeAfter(doc);
+                }
+                else if (rsOffsetContext.lastTimestamp() != null) {
+                    LOGGER.info("Resuming streaming from operation time '{}'", rsOffsetContext.lastTimestamp());
+                    rsChangeStream.startAtOperationTime(rsOffsetContext.lastTimestamp());
+                }
+
+                if (connectorConfig.getCursorMaxAwaitTime() > 0) {
+                    rsChangeStream.maxAwaitTime(connectorConfig.getCursorMaxAwaitTime(), TimeUnit.MILLISECONDS);
+                }
+
+                try (MongoChangeStreamCursor<ChangeStreamDocument<BsonDocument>> cursor = rsChangeStream.cursor()) {
+                    // In Replicator, this used cursor.hasNext() but this is a blocking call and I observed that this can
+                    // delay the shutdown of the connector by up to 15 seconds or longer. By introducing a Metronome, we
+                    // can respond to the stop request much faster and without much overhead.
+                    Metronome pause = Metronome.sleeper(Duration.ofMillis(500), clock);
+                    while (context.isRunning()) {
+                        // Use tryNext which will return null if no document is yet available from the cursor.
+                        // In this situation if not document is available, we'll pause.
+                        final ChangeStreamDocument<BsonDocument> event = cursor.tryNext();
+                        if (event != null) {
+                            LOGGER.trace("Arrived Change Stream event: {}", event);
+
+                            rsOffsetContext.changeStreamEvent(event);
+                            CollectionId collectionId = new CollectionId(
+                                    replicaSet.replicaSetName(),
+                                    event.getNamespace().getDatabaseName(),
+                                    event.getNamespace().getCollectionName());
+
+                            try {
+                                // Note that this will trigger a heartbeat request
+                                dispatcher.dispatchDataChangeEvent(
+                                        rsPartition,
+                                        collectionId,
+                                        new MongoDbChangeRecordEmitter(
+                                                rsPartition,
+                                                rsOffsetContext,
+                                                clock,
+                                                event, connectorConfig));
+                            }
+                            catch (Exception e) {
+                                errorHandler.setProducerThrowable(e);
+                                latch.countDown();
+                                return;
+                            }
+                        }
+                        else {
+                            // No event was returned, so trigger a heartbeat
+                            try {
+                                // Guard against `null` to be protective of issues like SERVER-63772, and situations called out in the Javadocs:
+                                // > resume token [...] can be null if the cursor has either not been iterated yet, or the cursor is closed.
+                                if (cursor.getResumeToken() != null) {
+                                    rsOffsetContext.noEvent(cursor);
+                                    dispatcher.dispatchHeartbeatEvent(rsPartition, rsOffsetContext);
+                                }
+                            }
+                            catch (InterruptedException e) {
+                                LOGGER.info("Replicator thread is interrupted");
+                                Thread.currentThread().interrupt();
+                                latch.countDown();
+                                return;
+                            }
+
+                            try {
+                                pause.pause();
+                                if (context.isPaused()) {
+                                    LOGGER.info("Streaming will now pause");
+                                    context.streamingPaused();
+                                    context.waitSnapshotCompletion();
+                                    LOGGER.info("Streaming resumed");
+                                }
+                            }
+                            catch (InterruptedException e) {
+                                break;
+                            }
+
+                        }
+                    }
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            latch.await();
+        }catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
+
+        executor.shutdownNow();
     }
 
     protected MongoDbOffsetContext emptyOffsets(MongoDbConnectorConfig connectorConfig) {

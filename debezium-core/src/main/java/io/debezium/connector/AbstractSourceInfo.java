@@ -30,7 +30,7 @@ public abstract class AbstractSourceInfo {
     public static final String COLLECTION_NAME_KEY = "collection";
     public static final String SEQUENCE_KEY = "sequence";
 
-    private final CommonConnectorConfig config;
+    protected final CommonConnectorConfig config;
 
     protected AbstractSourceInfo(CommonConnectorConfig config) {
         this.config = config;

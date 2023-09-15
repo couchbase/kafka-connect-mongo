@@ -8,6 +8,8 @@ package io.debezium.connector.mongodb;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -216,6 +218,7 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
     private boolean isSnapshotExpected(MongoDbPartition partition, ReplicaSet replicaSet, MongoDbOffsetContext offsetContext) {
         // todo: Right now we implement when needed snapshot by default. In the future we should provide the same options as other connectors.
         final ReplicaSetOffsetContext rsOffsetContext = offsetContext.getReplicaSetOffsetContext(replicaSet);
+        boolean snapRemainingForCollections = offsetContext.getIncludedCollections(replicaSet.replicaSetName()).values().stream().anyMatch(Optional::isEmpty);
 
         if (!rsOffsetContext.hasOffset()) {
             LOGGER.info("No existing offset found for replica set '{}', starting snapshot", rsOffsetContext.getReplicaSetName());
@@ -225,6 +228,10 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
         if (rsOffsetContext.isSnapshotOngoing()) {
             // The latest snapshot was not completed, so restart it
             LOGGER.info("The previous snapshot was incomplete for '{}', so restarting the snapshot", rsOffsetContext.getReplicaSetName());
+            return true;
+        }
+
+        if(snapRemainingForCollections) {
             return true;
         }
 
@@ -313,7 +320,12 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
 
         LOGGER.info("Beginning snapshot of '{}' at {}", rsName, rsOffsetContext.getOffset());
 
-        final List<CollectionId> collections = determineDataCollectionsToBeSnapshotted(mongo.collections()).collect(Collectors.toList());
+        final List<CollectionId> allExpectedCollections = determineDataCollectionsToBeSnapshotted(mongo.collections()).collect(Collectors.toList());
+        final List<String> includedCollections = snapshotContext.offset.getIncludedCollections(replicaSet.replicaSetName()).entrySet().stream().filter(x -> x.getValue().isEmpty()).map(Map.Entry::getKey).collect(Collectors.toList());
+        final List<CollectionId> collections = allExpectedCollections.stream().filter(collectionId -> includedCollections.contains(collectionId.namespace())).collect(Collectors.toList());
+
+        LOGGER.info("Expected Collections to Snapshot: {}",collections);
+
         snapshotProgressListener.monitoredDataCollectionsDetermined(snapshotContext.partition, collections);
         if (connectorConfig.getSnapshotMaxThreads() > 1) {
             // Since multiple snapshot threads are to be used, create a thread pool and initiate the snapshot.
@@ -450,6 +462,7 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
 
                 LOGGER.info("\t Finished snapshotting {} records for collection '{}'; total duration '{}'", docs, collectionId,
                         Strings.duration(clock.currentTimeInMillis() - exportStart));
+                snapshotContext.offset.markSnapshotComplete(collectionId.replicaSetName(), collectionId.namespace(), snapshotContext.offset.source().getResumeToken(replicaSet.replicaSetName()));
                 snapshotProgressListener.dataCollectionSnapshotCompleted(snapshotContext.partition, collectionId, docs);
             }
         });

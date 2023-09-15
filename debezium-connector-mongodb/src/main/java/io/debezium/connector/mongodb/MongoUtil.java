@@ -5,6 +5,7 @@
  */
 package io.debezium.connector.mongodb;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -212,6 +213,21 @@ public class MongoUtil {
     public static ChangeStreamIterable<BsonDocument> openChangeStream(MongoClient client, MongoDbTaskContext taskContext) {
         var config = taskContext.getConnectorConfig();
         final ChangeStreamPipeline pipeline = new ChangeStreamPipelineFactory(config, taskContext.filters().getConfig()).create();
+
+        // capture scope is database
+        if (config.getCaptureScope() == MongoDbConnectorConfig.CaptureScope.DATABASE) {
+            var database = config.getCaptureTarget().orElseThrow();
+            LOGGER.info("Change stream is restricted to '{}' database", database);
+            return client.getDatabase(database).watch(pipeline.getStages(), BsonDocument.class);
+        }
+
+        // capture scope is deployment
+        return client.watch(pipeline.getStages(), BsonDocument.class);
+    }
+
+    public static ChangeStreamIterable<BsonDocument> openChangeStream(MongoClient client, MongoDbTaskContext taskContext, List<String> targetCollections) {
+        var config = taskContext.getConnectorConfig();
+        final ChangeStreamPipeline pipeline = new ChangeStreamPipelineFactory(config, taskContext.filters().getConfig()).create(targetCollections);
 
         // capture scope is database
         if (config.getCaptureScope() == MongoDbConnectorConfig.CaptureScope.DATABASE) {

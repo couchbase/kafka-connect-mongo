@@ -7,6 +7,8 @@ package io.debezium.connector.mongodb;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -87,9 +89,11 @@ public final class SourceInfo extends BaseSourceInfo {
 
     private static final BsonTimestamp INITIAL_TIMESTAMP = new BsonTimestamp();
     private static final Position INITIAL_POSITION = new Position(INITIAL_TIMESTAMP, null, null);
+    public static final String COLLECTION_PREFIX = "__collection_";
 
     private final ConcurrentMap<String, Map<String, String>> sourcePartitionsByReplicaSetName = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Position> positionsByReplicaSetName = new ConcurrentHashMap<>();
+    public static final ConcurrentMap<String, Map<String, Optional<String>>> alreadySnapshottedCollectionByReplicaSetName = new ConcurrentHashMap<>();
     private final Set<String> initialSyncReplicaSets = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private String replicaSetName;
@@ -191,6 +195,21 @@ public final class SourceInfo extends BaseSourceInfo {
         return sourcePartitionsByReplicaSetName.computeIfAbsent(replicaSetName, rsName -> Collect.hashMapOf(SERVER_ID_KEY, serverName(), REPLICA_SET_NAME, rsName));
     }
 
+    public Map<String, Optional<String>> getIncludedCollections(String replicaSetName) {
+        if (replicaSetName == null) {
+            throw new IllegalArgumentException("Replica set name may not be null");
+        }
+        return alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName);
+    }
+
+    public void markSnapshotComplete(String replicaSetName, String collectionNamespace, String resumeToken) {
+        alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName).put(collectionNamespace, Optional.of(resumeToken));
+    }
+
+    public String getResumeToken(String replicaSetName) {
+        return positionsByReplicaSetName.get(replicaSetName).resumeToken;
+    }
+
     public String lastResumeToken(String replicaSetName) {
         Position existing = positionsByReplicaSetName.get(replicaSetName);
         return existing != null ? existing.resumeToken : null;
@@ -227,6 +246,12 @@ public final class SourceInfo extends BaseSourceInfo {
                 TIMESTAMP, existing.getTime(),
                 ORDER, existing.getInc());
         existing.getResumeToken().ifPresent(resumeToken -> offset.put(RESUME_TOKEN, resumeToken));
+
+        for(String collection : alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName).keySet()) {
+            String key = COLLECTION_PREFIX+collection;
+            Optional<String> collectionResumeToken = alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName).get(collection);
+            offset.put(key, collectionResumeToken.orElse(null));
+        }
 
         return addSessionTxnIdToOffset(existing, offset);
     }
@@ -277,7 +302,12 @@ public final class SourceInfo extends BaseSourceInfo {
         Position position = Position.changeStreamPosition(null, resumeToken, null);
         positionsByReplicaSetName.put(replicaSetName, position);
 
-        onEvent(replicaSetName, CollectionId.parse(replicaSetName, namespace), position, wallTime);
+        CollectionId cId = CollectionId.parse(replicaSetName, namespace);
+        if(cId != null) {
+            alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName).put(cId.namespace(),Optional.of(resumeToken));
+        }
+
+        onEvent(replicaSetName, cId, position, wallTime);
     }
 
     public void noEvent(String replicaSetName, BsonTimestamp timestamp) {
@@ -302,6 +332,10 @@ public final class SourceInfo extends BaseSourceInfo {
             BsonTimestamp ts = changeStreamEvent.getClusterTime();
             position = Position.changeStreamPosition(ts, resumeToken, MongoUtil.getChangeStreamSessionTransactionId(changeStreamEvent));
             namespace = changeStreamEvent.getNamespace().getFullName();
+            CollectionId cId = CollectionId.parse(replicaSetName, namespace);
+            if(cId != null) {
+                alreadySnapshottedCollectionByReplicaSetName.get(replicaSetName).put(cId.namespace(), Optional.of(resumeToken));
+            }
             if (changeStreamEvent.getWallTime() != null) {
                 wallTime = changeStreamEvent.getWallTime().getValue();
             }
@@ -361,6 +395,26 @@ public final class SourceInfo extends BaseSourceInfo {
         String resumeToken = stringOffsetValue(sourceOffset, RESUME_TOKEN);
         Position position = new Position(new BsonTimestamp(time, order), changeStreamTxnId, resumeToken);
 
+        List<String> includedCollections = ((MongoDbConnectorConfig) config).getIncludedCollections();
+
+        Map<String, Optional<String>> alreadySnapshotCollections = new HashMap<>();
+        for(String key: sourceOffset.keySet()) {
+            if(key.startsWith(COLLECTION_PREFIX)) {
+                String collectionName = key.substring(COLLECTION_PREFIX.length());
+                Optional<String> snapshotTaken = sourceOffset.get(key) == null ? Optional.empty() : Optional.of((String) sourceOffset.get(key));
+                if(includedCollections.contains(collectionName)) {
+                    alreadySnapshotCollections.put(collectionName, snapshotTaken);
+                }
+            }
+        }
+
+        for(String collection : includedCollections) {
+            if(!alreadySnapshotCollections.containsKey(collection)) {
+                alreadySnapshotCollections.put(collection, Optional.empty());
+            }
+        }
+
+        alreadySnapshottedCollectionByReplicaSetName.put(replicaSetName, alreadySnapshotCollections);
         positionsByReplicaSetName.put(replicaSetName, position);
         return true;
     }
@@ -492,6 +546,6 @@ public final class SourceInfo extends BaseSourceInfo {
         return "SourceInfo [sourcePartitionsByReplicaSetName=" + sourcePartitionsByReplicaSetName
                 + ", positionsByReplicaSetName=" + positionsByReplicaSetName + ", initialSyncReplicaSets="
                 + initialSyncReplicaSets + ", replicaSetName=" + replicaSetName + ", collectionId=" + collectionId
-                + ", position=" + position + "]";
+                + ", position=" + position + ", snapMap=" + alreadySnapshottedCollectionByReplicaSetName + "]";
     }
 }

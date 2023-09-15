@@ -50,6 +50,16 @@ class ChangeStreamPipelineFactory {
         return effectivePipeline;
     }
 
+    ChangeStreamPipeline create(List<String> targetCollections) {
+        // Resolve and combine internal and user pipelines serially
+        var internalPipeline = createInternalPipeline(targetCollections);
+        var userPipeline = createUserPipeline();
+        var effectivePipeline = internalPipeline.then(userPipeline);
+
+        LOGGER.info("Effective change stream pipeline: {}", effectivePipeline);
+        return effectivePipeline;
+    }
+
     private ChangeStreamPipeline createInternalPipeline() {
         // Resolve the leaf filters
         var filters = Stream
@@ -59,6 +69,23 @@ class ChangeStreamPipelineFactory {
                 .flatMap(Optional::stream)
                 .collect(toList());
 
+        return combiningFiltersAndCreatingInternalPipeline(filters);
+    }
+
+    private ChangeStreamPipeline createInternalPipeline(List<String> targetCollections) {
+        // Resolve the leaf filters
+        var filters = Stream
+                .of(
+                        createCollectionFilter(targetCollections),
+                        createOperationTypeFilter(connectorConfig))
+                .flatMap(Optional::stream)
+                .collect(toList());
+
+        return combiningFiltersAndCreatingInternalPipeline(filters);
+    }
+
+
+    private ChangeStreamPipeline combiningFiltersAndCreatingInternalPipeline(List<Bson> filters) {
         // Combine
         var andFilter = Filters.and(filters);
         var matchFilter = Aggregates.match(andFilter);
@@ -121,6 +148,21 @@ class ChangeStreamPipelineFactory {
                 orFilters(
                         includedSignalCollectionFilters,
                         collectionsFilters));
+    }
+
+    /**
+     * This function is only for set of given collection name
+     * @param targetCollections
+     * @return
+     */
+    private static Optional<Bson> createCollectionFilter(List<String> targetCollections) {
+        var collectionsFilters = Optional.<Bson> empty();
+        if (!targetCollections.isEmpty()) {
+            String collections = String.join(",",targetCollections);
+            collectionsFilters = Optional
+                    .of(Filters.regex("namespace", collections.replaceAll(",", "|"), "i"));
+        }
+        return collectionsFilters;
     }
 
     private static Optional<Bson> createOperationTypeFilter(MongoDbConnectorConfig connectorConfig) {
