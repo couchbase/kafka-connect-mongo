@@ -5,13 +5,19 @@
  */
 package io.debezium.connector.mongodb;
 
-import java.util.function.Function;
-
+import com.mongodb.BasicDBObject;
 import org.bson.BsonDocument;
+import org.bson.BsonDouble;
+import org.bson.BsonInt32;
+import org.bson.BsonInt64;
+import org.bson.BsonObjectId;
+import org.bson.BsonString;
+import org.bson.BsonSymbol;
+import org.bson.BsonValue;
 import org.bson.json.JsonMode;
 import org.bson.json.JsonWriterSettings;
 
-import com.mongodb.BasicDBObject;
+import java.util.function.Function;
 
 /**
  * A class responsible for serialization of message keys and values to MongoDB compatible JSON
@@ -50,6 +56,98 @@ class JsonSerialization {
 
     JsonSerialization() {
         transformer = (doc) -> doc.toJson(COMPACT_JSON_SETTINGS);
+    }
+
+    public String getDocumentIdSnapshot2(BsonDocument document) {
+        if (document == null) {
+            return null;
+        }
+
+        BsonValue key = document.get(ID_FIELD_NAME);
+
+        Object keyValue;
+        switch (key.getBsonType()) {
+            case OBJECT_ID: {
+                keyValue = stringWrap(((BsonObjectId) key).getValue().toString());
+                break;
+            }
+            case INT32: {
+                keyValue = ((BsonInt32) key).getValue();
+                break;
+            }
+            case INT64: {
+                keyValue = ((BsonInt64) key).getValue();
+                break;
+            }
+            case DOUBLE: {
+                keyValue = ((BsonDouble) key).getValue();
+                break;
+            }
+            case SYMBOL: {
+                keyValue = stringWrap(((BsonSymbol) key).getSymbol());
+                break;
+            }
+            case STRING: {
+                keyValue = stringWrap(((BsonString) key).getValue());
+                break;
+            }
+            default: {
+                return getDocumentIdSnapshot(document);
+            }
+        }
+
+        System.out.println(keyValue);
+        String val = "{\"" + ID_FIELD_NAME + "\"" + ":" + keyValue + "}";
+        System.out.println("DBG: createdVal" + val);
+        return val;
+    }
+
+    public String getDocumentIdChangeStream2(BsonDocument document) {
+        if (document == null) {
+            return null;
+        }
+
+        BsonValue key = document.get(ID_FIELD_NAME);
+
+        Object keyValue;
+        switch (key.getBsonType()) {
+            case OBJECT_ID: {
+                keyValue = stringWrap(((BsonObjectId) key).getValue().toString());
+                break;
+            }
+            case INT32: {
+                keyValue = ((BsonInt32) key).getValue();
+                break;
+            }
+            case INT64: {
+                keyValue = ((BsonInt64) key).getValue();
+                break;
+            }
+            case DOUBLE: {
+                keyValue = ((BsonDouble) key).getValue();
+                break;
+            }
+            case SYMBOL: {
+                keyValue = stringWrap(((BsonSymbol) key).getSymbol());
+                break;
+            }
+            case STRING: {
+                keyValue = stringWrap(((BsonString) key).getValue());
+                break;
+            }
+            default: {
+                return getDocumentIdChangeStream(document);
+            }
+        }
+
+        System.out.println(keyValue);
+        String val = "{\"" + ID_FIELD_NAME + "\"" + ":" + keyValue + "}";
+        System.out.println("DBG: createdStreamVal" + val);
+        return val;
+    }
+
+    private String stringWrap(String val){
+        return "\"" + val + "\"";
     }
 
     public String getDocumentIdSnapshot(BsonDocument document) {

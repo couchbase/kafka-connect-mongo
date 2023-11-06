@@ -46,3 +46,7 @@ mkdir -p "${DIST_DIR}"
 cp \
     debezium-connector-mongodb/target/debezium-connector-mongodb-${PRODUCT_VERSION}-jar-with-dependencies.jar \
     "${DIST_DIR}"
+
+cp \
+    debezium-connector-mysql/target/debezium-connector-mysql-${PRODUCT_VERSION}-jar-with-dependencies.jar \
+    "${DIST_DIR}"

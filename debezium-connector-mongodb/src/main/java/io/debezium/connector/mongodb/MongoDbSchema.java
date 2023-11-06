@@ -88,8 +88,8 @@ public class MongoDbSchema implements DatabaseSchema<CollectionId> {
                     id,
                     fieldFilter,
                     keySchema,
-                    serialization::getDocumentIdSnapshot,
-                    serialization::getDocumentIdChangeStream,
+                    serialization::getDocumentIdSnapshot2,
+                    serialization::getDocumentIdChangeStream2,
                     envelope,
                     valueSchema,
                     serialization::getDocumentValue);

@@ -821,6 +821,7 @@ public class MongoDbConnectorConfig extends CommonConnectorConfig {
             ConnectionString cs = new ConnectionString(connectionStringValue);
         }
         catch (Exception e) {
+            e.printStackTrace();
             problems.accept(field, connectionStringValue, "Invalid connection string");
             return 1;
         }
