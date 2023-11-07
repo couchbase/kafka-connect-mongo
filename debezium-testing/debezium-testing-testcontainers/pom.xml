@@ -28,6 +28,7 @@
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>
       <artifactId>okhttp</artifactId>
+      <version>4.12.0</version>
     </dependency>
     <dependency>
       <groupId>org.awaitility</groupId>
@@ -92,6 +93,7 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
+      <version>3.6.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -120,7 +122,6 @@
       <artifactId>commons-compress</artifactId>
       <version>1.24.0</version>
     </dependency>
-
   </dependencies>
 
   <build>

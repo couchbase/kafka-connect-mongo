@@ -47,7 +47,7 @@
         <version.s3>2.17.241</version.s3>
 
         <!-- Blob Storage -->
-        <version.azure.blob>12.21.0</version.azure.blob>
+        <version.azure.blob>12.24.1</version.azure.blob>
 
         <!-- Testing -->
         <version.junit>4.13.1</version.junit>
@@ -148,7 +148,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>2.13.4.2</version>
+                <version>2.13.5</version>
                 <optional>true</optional>
             </dependency>
             <dependency>
