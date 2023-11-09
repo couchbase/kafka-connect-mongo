@@ -99,7 +99,7 @@
         <version.jackson>2.15.3</version.jackson>
         <version.jackson.databind>2.15.3</version.jackson.databind>
         <version.org.slf4j>1.7.36</version.org.slf4j>
-        <version.netty>4.1.100.Final</version.netty>
+        <version.netty>5.0.0.Alpha2</version.netty>
 
         <!-- Scala version used to build Kafka -->
         <version.kafka.scala>2.13</version.kafka.scala>
