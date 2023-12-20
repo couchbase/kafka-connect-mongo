@@ -166,7 +166,6 @@
         <module>debezium-microbenchmark</module>
         <module>debezium-scripting</module>
         <module>debezium-connect-rest-extension</module>
-        <module>debezium-schema-generator</module>
         <module>debezium-storage</module>
         <module>debezium-interceptor</module>
     </modules>
