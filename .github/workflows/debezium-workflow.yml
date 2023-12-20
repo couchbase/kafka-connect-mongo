@@ -52,7 +52,6 @@ jobs:
             debezium-api/**
             debezium-assembly-descriptors/**
             debezium-core/**
-            debezium-embedded/**
             debezium-revapi/**
             debezium-ide-configs/**
             debezium-parent/pom.xml
@@ -601,7 +600,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
           ./mvnw clean install
-          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
           -am
           -DskipTests=true
           -DskipITs=true
@@ -669,7 +668,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
           ./core/mvnw clean install -f core/pom.xml
-          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
           -am
           -DskipTests=true
           -DskipITs=true
@@ -730,7 +729,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
            ./core/mvnw clean install -f core/pom.xml 
-           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
            -am
            -DskipTests=true
            -DskipITs=true
@@ -787,7 +786,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
            ./core/mvnw clean install -f core/pom.xml 
-           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
            -am
            -DskipTests=true
            -DskipITs=true
@@ -844,7 +843,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
            ./core/mvnw clean install -f core/pom.xml
-           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+           -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
            -am
            -DskipTests=true
            -DskipITs=true
@@ -901,7 +900,7 @@ jobs:
       - name: Build Debezium (Core)
         run: >
           ./core/mvnw clean install -f core/pom.xml
-          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,debezium-embedded,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
+          -pl debezium-assembly-descriptors,debezium-bom,debezium-core,:debezium-ide-configs,:debezium-checkstyle,:debezium-revapi
           -am
           -DskipTests=true
           -DskipITs=true
