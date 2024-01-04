@@ -163,7 +163,6 @@
         <module>debezium-connector-mysql</module>
         <module>debezium-connector-postgres</module>
         <module>debezium-connector-mongodb</module>
-        <module>debezium-connect-rest-extension</module>
         <module>debezium-storage</module>
         <module>debezium-interceptor</module>
     </modules>

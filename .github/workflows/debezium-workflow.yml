@@ -101,7 +101,6 @@ jobs:
         uses: tj-actions/changed-files@v37.6.0
         with:
           files: |
-            debezium-connect-rest-extension/**
             support/checkstyle/**
             debezium-parent/pom.xml
             debezium-bom/pom.xml
@@ -132,7 +131,6 @@ jobs:
         with:
           files: |
             debezium-core/**
-            debezium-connect-rest-extension/**
             debezium-connector-mongodb/**
             debezium-connector-mysql/**                        
             debezium-connector-postgres/**
@@ -473,39 +471,6 @@ jobs:
           -Dmaven.wagon.http.pool=false
           -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
           -Ddebezium.test.records.waittime=10
-
-
-  build_rest_extension:
-    needs: [check_style, file_changes]
-    if: ${{ needs.file_changes.outputs.rest-extension-changed == 'true' }}
-    name: "REST Extension"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Action
-        uses: actions/checkout@v3
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: 17
-
-      - name: Cache Maven Repository
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
-
-      - name: Build Connect REST Extension
-        run: >
-          ./mvnw clean install -B -pl debezium-connect-rest-extension -am
-          -Dcheckstyle.skip=true
-          -Dformat.skip=true
-          -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
-          -Dmaven.wagon.http.pool=false
-          -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
 
   build_schema_generator:
     needs: [check_style, file_changes]
