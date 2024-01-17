@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.debezium.pipeline.spi.OffsetContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -128,6 +129,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     protected void determineSnapshotOffset(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> ctx, PostgresOffsetContext previousOffset)
             throws Exception {
         PostgresOffsetContext offset = ctx.offset;
+
         if (offset == null) {
             if (previousOffset != null && !snapshotter.shouldStreamEventsStartingFromSnapshot()) {
                 // The connect framework, not the connector, manages triggering committing offset state so the
@@ -135,28 +137,32 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
                 // The previousOffset variable is shared between the catch up streaming and snapshot phases and
                 // has the latest known offset state.
                 offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock(),
-                        previousOffset.lastCommitLsn(), previousOffset.lastCompletelyProcessedLsn());
+                        previousOffset.lastCommitLsn(), previousOffset.lastCompletelyProcessedLsn(),previousOffset.getLastCommitLsnMap(),previousOffset.getConsistentPoint());
             }
-            else {
-                offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock());
+            else if(previousOffset==null) {
+                offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock(),slotCreatedInfo.startLsn());
+            }
+            else{
+                offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock(),previousOffset.getMinLastCommitLsn(),null,previousOffset.getLastCommitLsnMap(),previousOffset.getConsistentPoint());
+            }
+            for(TableId tableId:ctx.capturedTables) {
+                updateOffsetForSnapshot(offset,tableId);
             }
             ctx.offset = offset;
         }
 
-        updateOffsetForSnapshot(offset);
     }
 
-    private void updateOffsetForSnapshot(PostgresOffsetContext offset) throws SQLException {
+    private void updateOffsetForSnapshot(PostgresOffsetContext offset,TableId tableId) throws SQLException {
         final Lsn xlogStart = getTransactionStartLsn();
         final long txId = jdbcConnection.currentTransactionId().longValue();
         LOGGER.info("Read xlogStart at '{}' from transaction '{}'", xlogStart, txId);
 
         // use the old xmin, as we don't want to update it if in xmin recovery
-        offset.updateWalPosition(xlogStart, offset.lastCompletelyProcessedLsn(), clock.currentTime(), txId, offset.xmin(), null, null);
+        offset.updateWalPosition(xlogStart, xlogStart, clock.currentTime(), txId, offset.xmin(), tableId, null);
     }
 
     protected void updateOffsetForPreSnapshotCatchUpStreaming(PostgresOffsetContext offset) throws SQLException {
-        updateOffsetForSnapshot(offset);
         offset.setStreamingStoppingLsn(Lsn.valueOf(jdbcConnection.currentXLogLocation()));
     }
 
@@ -168,7 +174,8 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             // they'll be lost.
             return slotCreatedInfo.startLsn();
         }
-        else if (!snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo != null) {
+        else
+            if (!snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo != null) {
             // Allow streaming to resume from where streaming stopped last rather than where the current snapshot starts.
             SlotState currentSlotState = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(),
                     connectorConfig.plugin().getPostgresPluginName());
@@ -256,5 +263,17 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     @Override
     protected PostgresOffsetContext copyOffset(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext) {
         return new Loader(connectorConfig).load(snapshotContext.offset.getOffset());
+    }
+    @Override
+    public boolean skipTable(PostgresOffsetContext previousOffset, TableId tableId) {
+        return previousOffset!=null && previousOffset.hasTable(tableId);
+    }
+
+    @Override
+    public void markSnapshotComplete(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext) throws Exception {
+        for (TableId tableId : snapshotContext.capturedTables)
+        {
+            snapshotContext.offset.addTable(tableId);
+        }
     }
 }

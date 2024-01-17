@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import io.debezium.connector.postgresql.connection.*;
+import io.debezium.relational.RelationalTableFilters;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
@@ -27,10 +29,6 @@ import io.debezium.config.EnumeratedValue;
 import io.debezium.config.Field;
 import io.debezium.connector.AbstractSourceInfo;
 import io.debezium.connector.SourceInfoStructMaker;
-import io.debezium.connector.postgresql.connection.MessageDecoder;
-import io.debezium.connector.postgresql.connection.MessageDecoderContext;
-import io.debezium.connector.postgresql.connection.PostgresConnection;
-import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.connection.pgoutput.PgOutputMessageDecoder;
 import io.debezium.connector.postgresql.connection.pgproto.PgProtoMessageDecoder;
 import io.debezium.connector.postgresql.snapshot.AlwaysSnapshotter;
@@ -902,6 +900,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     private final SchemaRefreshMode schemaRefreshMode;
     private final boolean flushLsnOnSource;
     private final ReplicaIdentityMapper replicaIdentityMapper;
+    private PostgresTableFilters tableFilters;
 
     public PostgresConnectorConfig(Configuration config) {
         super(
@@ -922,6 +921,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         this.flushLsnOnSource = config.getBoolean(SHOULD_FLUSH_LSN_IN_SOURCE_DB);
         final var replicaIdentityMapping = config.getString(REPLICA_IDENTITY_AUTOSET_VALUES);
         this.replicaIdentityMapper = (replicaIdentityMapping != null) ? new ReplicaIdentityMapper(replicaIdentityMapping) : null;
+        this.tableFilters=new PostgresTableFilters(config.getString(TABLE_INCLUDE_LIST_NAME),null,null,this.useCatalogBeforeSchema);
     }
 
     protected String hostname() {
@@ -1148,6 +1148,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     @Override
     public String getContextName() {
         return Module.contextName();
+    }
+
+    public PostgresTableFilters getPostgresTableFilters() {
+        return tableFilters;
     }
 
     @Override

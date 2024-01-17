@@ -124,12 +124,13 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
 
             // Note that there's a minor race condition here: a new table matching the filters could be created between
             // this call and the determination of the initial snapshot position below; this seems acceptable, though
-            determineCapturedTables(ctx);
+            determineCapturedTables(ctx,previousOffset);
             snapshotProgressListener.monitoredDataCollectionsDetermined(snapshotContext.partition, ctx.capturedTables);
             // Init jdbc connection pool for reading table schema and data
             connectionPool = createConnectionPool(ctx);
 
             LOGGER.info("Snapshot step 3 - Locking captured tables {}", ctx.capturedTables);
+
 
             if (snapshottingTask.snapshotSchema()) {
                 lockTablesForSchemaSnapshot(context, ctx);
@@ -268,7 +269,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private void determineCapturedTables(RelationalSnapshotContext<P, O> ctx) throws Exception {
+    private void determineCapturedTables(RelationalSnapshotContext<P, O> ctx,OffsetContext previousOffset) throws Exception {
         Set<TableId> allTableIds = getAllTableIds(ctx);
         Set<TableId> snapshottedTableIds = determineDataCollectionsToBeSnapshotted(allTableIds).collect(Collectors.toSet());
 
@@ -283,6 +284,10 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         }
 
         for (TableId tableId : snapshottedTableIds) {
+            if(skipTable((O) previousOffset,tableId))
+            {
+                continue;
+            }
             if (connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
                 LOGGER.trace("Adding table {} to the list of captured tables for which the data will be snapshotted", tableId);
                 capturedTables.add(tableId);
@@ -298,6 +303,10 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
                 .sorted()
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
+
+    public abstract boolean skipTable(O previousOffset,TableId tableId);
+
+    public abstract void markSnapshotComplete(RelationalSnapshotContext<P, O> snapshotContext) throws Exception;
 
     /**
      * Returns all candidate tables; the current filter configuration will be applied to the result set, resulting in
@@ -461,7 +470,17 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         for (O offset : offsets) {
             offset.preSnapshotCompletion();
         }
+
+
+
+//        for (TableId tableId : snapshotContext.capturedTables)
+//        {
+//            snapshotContext.offset.addTable(tableId);
+//            snapshotContext.offset.SnapshotCompletion(tableId);
+//        }
+
         snapshotReceiver.completeSnapshot();
+        markSnapshotComplete(snapshotContext);
         for (O offset : offsets) {
             offset.postSnapshotCompletion();
         }

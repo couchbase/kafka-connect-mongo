@@ -116,6 +116,16 @@ public class MySqlSnapshotChangeEventSource extends RelationalSnapshotChangeEven
     }
 
     @Override
+    public boolean skipTable(MySqlOffsetContext previousOffset, TableId tableId) {
+        return false;
+    }
+
+    @Override
+    public void markSnapshotComplete(RelationalSnapshotContext<MySqlPartition, MySqlOffsetContext> snapshotContext) throws Exception {
+
+    }
+
+    @Override
     protected Set<TableId> getAllTableIds(RelationalSnapshotContext<MySqlPartition, MySqlOffsetContext> ctx)
             throws Exception {
         // -------------------

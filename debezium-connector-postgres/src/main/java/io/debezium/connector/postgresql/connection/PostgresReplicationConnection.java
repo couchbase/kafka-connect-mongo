@@ -27,6 +27,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import io.debezium.spi.schema.DataCollectionId;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.postgresql.core.BaseConnection;
 import org.postgresql.core.ServerVersion;
@@ -65,7 +66,9 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
     private final String slotName;
     private final String publicationName;
-    private final RelationalTableFilters tableFilter;
+//    private final RelationalTableFilters tableFilter;
+
+    private final PostgresTableFilters tableFilter;
     private final PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode;
     private final PostgresConnectorConfig.LogicalDecoder plugin;
     private final boolean dropSlotOnClose;
@@ -101,7 +104,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private PostgresReplicationConnection(PostgresConnectorConfig config,
                                           String slotName,
                                           String publicationName,
-                                          RelationalTableFilters tableFilter,
+                                          PostgresTableFilters tableFilter,
                                           PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode,
                                           PostgresConnectorConfig.LogicalDecoder plugin,
                                           boolean dropSlotOnClose,
@@ -128,6 +131,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         this.hasInitedSlot = false;
         this.replicaIdentityMapper = config.replicaIdentityMapper();
     }
+
 
     private static JdbcConfiguration addDefaultSettings(JdbcConfiguration configuration) {
         // first copy the parent's default settings...
@@ -792,7 +796,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         private final PostgresConnectorConfig config;
         private String slotName = DEFAULT_SLOT_NAME;
         private String publicationName = DEFAULT_PUBLICATION_NAME;
-        private RelationalTableFilters tableFilter;
+        private PostgresTableFilters tableFilter;
         private PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode = PostgresConnectorConfig.AutoCreateMode.ALL_TABLES;
         private PostgresConnectorConfig.LogicalDecoder plugin = PostgresConnectorConfig.LogicalDecoder.DECODERBUFS;
         private boolean dropSlotOnClose = DEFAULT_DROP_SLOT_ON_CLOSE;
@@ -822,7 +826,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
 
         @Override
-        public Builder withTableFilter(RelationalTableFilters tableFilter) {
+        public Builder withTableFilter(PostgresTableFilters tableFilter) {
             assert tableFilter != null;
             this.tableFilter = tableFilter;
             return this;

@@ -568,6 +568,8 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
     private final FieldNamer<Column> fieldNamer;
     private final SnapshotTablesRowCountOrder snapshotOrderByRowCount;
 
+    protected boolean useCatalogBeforeSchema;
+
     protected RelationalDatabaseConnectorConfig(Configuration config, TableFilter systemTablesFilter,
                                                 TableIdToStringMapper tableIdMapper, int defaultSnapshotFetchSize,
                                                 ColumnFilterMode columnFilterMode, boolean useCatalogBeforeSchema) {
@@ -576,6 +578,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
         this.temporalPrecisionMode = TemporalPrecisionMode.parse(config.getString(TIME_PRECISION_MODE));
         this.keyMapper = CustomKeyMapper.getInstance(config.getString(MSG_KEY_COLUMNS), tableIdMapper);
         this.tableIdMapper = tableIdMapper;
+        this.useCatalogBeforeSchema=useCatalogBeforeSchema;
 
         this.jdbcConfig = JdbcConfiguration.adapt(
                 config.subset(DATABASE_CONFIG_PREFIX, true).merge(config.subset(DRIVER_CONFIG_PREFIX, true)));

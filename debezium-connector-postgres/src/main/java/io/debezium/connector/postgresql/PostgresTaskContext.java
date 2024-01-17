@@ -107,7 +107,7 @@ public class PostgresTaskContext extends CdcSourceTaskContext {
         return ReplicationConnection.builder(config)
                 .withSlot(config.slotName())
                 .withPublication(config.publicationName())
-                .withTableFilter(config.getTableFilters())
+                .withTableFilter(config.getPostgresTableFilters())
                 .withPublicationAutocreateMode(config.publicationAutocreateMode())
                 .withPlugin(config.plugin())
                 .dropSlotOnClose(dropSlotOnStop)

@@ -130,7 +130,7 @@ public interface ReplicationConnection extends AutoCloseable {
          * @return this instance
          * @see #config.getTableFilters()
          */
-        Builder withTableFilter(RelationalTableFilters tableFilter);
+        Builder withTableFilter(PostgresTableFilters tableFilter);
 
         /**
          * Sets the publication autocreate mode for the PG logical publication
